@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model with Hotspots</title>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        /* ... your styles ... */
+        model-viewer {
+            width: 300px;
+            height: 600px;
+        }
+        .hotspot {
+            background-color: rgba(255, 0, 0, 0.8);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+        }
+        .annotation {
+            display: none;
+            position: absolute;
+            width: 300px;
+            padding: 20px;
+            border: 1px solid black;
+            background-color: white;
+            z-index: 1;
+        }
+        .edit-button, .delete-button {
+            display: none;
+            position: absolute;
+            padding: 5px 10px;
+            background-color: #f1f1f1;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+    <!-- ... your body content ... -->
+    <model-viewer src="https://cdn.glitch.global/397d99f6-59fb-4e3e-94ac-08e6ae45ea56/Chair.glb?v=1679745487628" alt="3D Model" camera-controls>
+    </model-viewer>
+    <div class="annotation"></div>
+    <button class="edit-button">Edit</button>
+    <button class="delete-button">Delete</button>
+    <script>
+        const modelViewer = document.querySelector('model-viewer');
+        const annotation = document.querySelector('.annotation');
+        const editButton = document.querySelector('.edit-button');
+        const deleteButton = document.querySelector('.delete-button');
+        let hotspotCounter = 0;
+        let currentHotspot = null;
+
+        function showAnnotation(event, hotspot) {
+            currentHotspot = hotspot;
+            annotation.style.display = 'block';
+            annotation.style.left = event.pageX + 'px';
+            annotation.style.top = event.pageY + 'px';
+            annotation.textContent = hotspot.dataset.annotation || `Hotspot ${hotspot.slot.split('-')[1]}: New hotspot.`;
+            annotation.contentEditable = false;
+
+            editButton.style.display = 'block';
+            editButton.style.left = (event.pageX + annotation.clientWidth - editButton.clientWidth) + 'px';
+            editButton.style.top = event.pageY + 'px';
+
+            deleteButton.style.display = 'block';
+            deleteButton.style.left = (event.pageX + annotation.clientWidth - deleteButton.clientWidth) + 'px';
+            deleteButton.style.top = (event.pageY + editButton.clientHeight) + 'px';
+        }
+              modelViewer.addEventListener('dblclick', async (event) => {
+            event.preventDefault();
+            const rect = modelViewer.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            const result = await modelViewer.positionAndNormalFromPoint(x, y);
+            if (!result) return;
+
+            hotspotCounter++;
+            const hotspot = document.createElement('div');
+            hotspot.slot = `hotspot-${hotspotCounter}`;
+            hotspot.dataset.position = result.position.toString();
+            hotspot.dataset.normal = result.normal.toString();
+            hotspot.className = 'hotspot';
+
+            modelViewer.appendChild(hotspot);
+
+            hotspot.addEventListener('click', (event) => {
+                showAnnotation(event, hotspot);
+            });
+
+            saveHotspotToLocalStorage(hotspot);
+        });
+
+        editButton.addEventListener('click', () => {
+            if (annotation.contentEditable === 'false') {
+                annotation.contentEditable = 'true';
+                editButton.textContent = 'Save';
+            } else {
+                annotation.contentEditable = 'false';
+                editButton.textContent = 'Edit';
+
+                if (currentHotspot) {
+                    currentHotspot.dataset.annotation = annotation.textContent;
+                    saveHotspotToLocalStorage(currentHotspot);
+                }
+            }
+        });
+
+        deleteButton.addEventListener('click', () => {
+    if (currentHotspot) {
+        const hotspots = JSON.parse(localStorage.getItem('hotspots')) || {};
+        delete hotspots[currentHotspot.slot];
+        localStorage.setItem('hotspots', JSON.stringify(hotspots));
+
+        modelViewer.removeChild(currentHotspot);
+        annotation.style.display = 'none';
+        editButton.style.display = 'none';
+        deleteButton.style.display = 'none';
+    }
+});
+
+
+        window.addEventListener('click', (event) => {
+            if (!event.target.closest('.hotspot') && !event.target.closest('.edit-button') && !event.target.closest('.delete-button') && annotation.contentEditable === 'false') {
+                annotation.style.display = 'none';
+                editButton.style.display = 'none';
+                deleteButton.style.display = 'none';
+            }
+        });
+
+        function saveHotspotToLocalStorage(hotspot) {
+            const hotspots = JSON.parse(localStorage.getItem('hotspots')) || {};
+            hotspots[hotspot.slot] = {
+                position: hotspot.dataset.position,
+                normal: hotspot.dataset.normal,
+                annotation: hotspot.dataset.annotation
+            };
+            localStorage.setItem('hotspots', JSON.stringify(hotspots));
+        }
+
+        function loadHotspotsFromLocalStorage() {
+    const hotspots = JSON.parse(localStorage.getItem('hotspots')) || {};
+    const existingHotspots = document.querySelectorAll('[slot^="hotspot-"]');
+    existingHotspots.forEach(hotspot => modelViewer.removeChild(hotspot));
+    hotspotCounter = 0;
+    for (const id in hotspots) {
+        const hotspotData = hotspots[id];
+        hotspotCounter++;
+        const hotspot = document.createElement('div');
+        hotspot.slot = `hotspot-${hotspotCounter}`;
+        hotspot.dataset.position = hotspotData.position;
+        hotspot.dataset.normal = hotspotData.normal;
+        hotspot.dataset.annotation = hotspotData.annotation;
+        hotspot.className = 'hotspot';
+
+        modelViewer.appendChild(hotspot);
+
+        hotspot.addEventListener('click', (event) => {
+            showAnnotation(event, hotspot);
+        });
+    }
+}
+
+
+        loadHotspotsFromLocalStorage();
+    </script>
+</body>
+</html>
